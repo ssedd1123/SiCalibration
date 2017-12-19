@@ -1,0 +1,95 @@
+/*
+#include "/projects/e16042/ribbitHiRA/detectors/RBDetector/RBDetector.cxx"
+#include "/projects/e16042/ribbitHiRA/electronics/RBHINPUnpacker.cxx"
+#include "/projects/e16042/ribbitHiRA/electronics/RBModuleUnpacker.cxx"
+#include "/projects/e16042/ribbitHiRA/detectors/RBHiRA/RBHiRA.cxx"
+#include "/projects/e16042/ribbitHiRA/detectors/RBHiRA/RBHiRATelescope.cxx"
+#include "/projects/e16042/ribbitHiRA/detectors/RBHiRA/RBHiRASiDet.cxx"
+#include "/projects/e16042/ribbitHiRA/detectors/RBHiRA/RBHiRACsI.cxx"
+#include "/projects/e16042/ribbitHiRA/detectors/RBHiRA/RBHiRAPixel.cxx"
+*/
+#include <vector>
+#include <map>
+#include <string>
+#include <sstream>
+#include <iostream>
+#include "TTree.h"
+#include "TFile.h"
+#include "TH1.h"
+#include "TH2.h"
+#include "tsangc/HiraETheta/HiraParser.h"
+#include "tsangc/HiraETheta/HiraTransformation.h"
+
+#include "/projects/e16042/ribbitHiRA/detectors/RBHiRATelescope.h"
+
+// Why??? Why can't I use c++11 for this root file!!!????
+template<class T>
+std::string to_string(const T& t_value)
+{
+	std::stringstream ss;
+	ss << t_value;
+	return ss.str();
+}
+
+void ReadTree()
+{
+	const int num_tele = 12;
+	const int num_strip = 32;
+	TFile *file = new TFile("~/HiraETheta/ReadTree/root-00010-00.root");
+	TTree *tree = (TTree*) file->Get("E16042");
+
+	HiraParser parser("tsangc/HiraETheta/hiraU_cal_final_orphans_5.detector");
+	HiraTransformation *transformation[num_tele];
+
+
+	int ik = 0;
+	while(parser.FindNextDetector("HiraTelescope") && ik < num_tele)
+	{
+		transformation[parser.GetTeleNo()- 1] = new HiraTransformation(parser.GetTVector3("A"), parser.GetTVector3("B"), parser.GetTVector3("C"), parser.GetTVector3("D")); 
+		cout << "Reading tele " << parser.GetTeleNo() - 1 << endl;
+		ik++;
+	}
+
+	TH1F* hists[num_tele][num_strip];
+	TH2F* E_vs_Theta = new TH2F("E_vs_Theta", "E vs Theta", 1000, -200, 200, 1000, 600, 2000);
+	for(int i = 0; i < num_tele; ++i)
+		for(int j = 0; j < num_strip; ++j)
+			hists[i][j] = new TH1F(("tele_" + to_string(i) + "_strip_" + to_string(j)).c_str(), "title", 200, 600, 2000.);
+
+	RBHiRATelescope* det[num_tele];
+	for(int i = 0; i < num_tele; ++i)
+	{
+		det[i] = new RBHiRATelescope;
+		tree->SetBranchAddress(("tele" + to_string(i)).c_str(), &det[i]);
+	}
+
+	unsigned int entries = tree->GetEntries();
+
+	for(int i = 0; i < 1000; ++i)
+	{
+		tree->GetEntry(i);
+		for(int j = 0; j < num_tele; ++j)
+			for(int k = 0; k < num_strip; ++k)
+				if(det[j]->EF.ERawHi[k] > 10)
+				{
+			//		cout << "Fill " << det[j]->EF.ERawHi[k] << endl;
+					hists[j][k]->Fill(det[j]->EF.ERawHi[k]);
+					for(int ij = 0; ij < num_strip; ++ij)
+						if(det[j]->EB.ERawHi[ij] > 10)
+						{
+			//				cout << ij << " " << k << endl;
+							E_vs_Theta->Fill(transformation[j]->TransformStripNum(ij, k).Theta(), det[j]->EB.ERawHi[ij]);
+						}
+				}
+
+		std::cout << "Processing percentage " << /*(double) i/ (double) entries*/ i << "\r";
+	}
+
+	TFile *output = new TFile("AllHist.root", "RECREATE");
+	for(int j = 0; j < num_tele; ++j)
+			for(int k = 0; k < num_strip; ++k)
+				hists[j][k]->Write();
+	E_vs_Theta->Write();
+	output->Write();
+
+}

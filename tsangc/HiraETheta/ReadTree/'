@@ -1,0 +1,17 @@
+#include "/projects/e16042/ribbitHiRA/detectors/RBDetector/RBDetector.cxx"
+#include "/projects/e16042/ribbitHiRA/detectors/RBHiRA/RBHiRATelescope.cxx"
+#include "/projects/e16042/ribbitHiRA/detectors/RBHiRA/RBHiRASiDet.cxx"
+
+void ReadTree()
+{
+	TFile *file = new TFile("root-00010-00.root");
+
+	TTreeReader reader("E16042", file);
+	TTreeReaderValue<RBHiRATelescope> si(reader, "tele0");
+
+	while(reader.Next())
+	{
+		std::cout << "Being read!!!\n";
+	}
+
+}
